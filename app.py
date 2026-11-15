@@ -16,11 +16,157 @@ from PIL import Image
 from streamlit_folium import st_folium
 
 st.set_page_config(
-    page_title="TerraAgro · Fiabilidad Satelital",
-    page_icon="🌱",
+    page_title="Virtual Harvest · Satellite Reliability",
+    page_icon="🌾",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# --- DICCIONARIO DE TRADUCCIONES (ES / EN) ---
+TEXTOS = {
+    "es": {
+        "badge": "🛰️ Teledetección Sentinel-2 · Google Earth Engine",
+        "title": "🌾 Virtual Harvest · Monitor de Fiabilidad Satelital",
+        "subtitle": "Evalúa la aptitud y salud de tus potreros combinando <b>4 indicadores multiespectrales</b> de alta resolución sobre imagen aérea real.",
+        "sidebar_title": "## ⚙️ Configuración de Análisis",
+        "sec1_header": "📍 1. Ubicación desde Google Maps",
+        "sec1_caption": "Haz clic derecho en Google Maps, copia las coordenadas y pégalas aquí:",
+        "coord_label": "Coordenadas (Latitud, Longitud)",
+        "sec2_header": "📐 2. Tamaño del Área a Analizar",
+        "unit_label": "Unidad de medida",
+        "units": [
+            "Hectáreas (superficie total)",
+            "Metros (lado del cuadrado)",
+            "Kilómetros (lado del cuadrado)",
+        ],
+        "qty_label": "Cantidad",
+        "sec3_header": "📅 3. Rango de Fechas",
+        "date_from": "Desde",
+        "date_to": "Hasta",
+        "sec4_header": "🎨 4. Visualización en Mapa",
+        "opacity_label": "Opacidad de capa de colores",
+        "sec5_header": "⚖️ 5. Importancia de cada dato (%)",
+        "w_vigor": "🌿 Vigor Vegetal (NDVI)",
+        "w_moisture": "💧 Humedad en Cultivo (NDMI)",
+        "w_chloro": "🍃 Clorofila / Nitrógeno (NDRE)",
+        "w_dry": "☀️ Terreno Libre Agua/Nubes (NDWI)",
+        "preview_title": "📐 **Vista previa de parcela:**",
+        "preview_sq": "• Cuadrado de **{lado:.0f} m × {lado:.0f} m**",
+        "preview_ha": "• Superficie total: **{ha:.2f} ha**",
+        "coord_err_short": "Formato inválido. Usa ejemplo: -42.15, -73.50",
+        "weight_exact": "✅ Ponderación exacta: **100%**",
+        "weight_norm": "ℹ️ Suma actual: **{suma}%** (se normalizará a 100%)",
+        "btn_run": "🚀 Calcular Fiabilidad del Terreno",
+        "err_zero_weights": "Debes asignar al menos un porcentaje mayor a 0 en los criterios.",
+        "err_dates": "La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.",
+        "err_coords": "Por favor revisa las coordenadas. Deben tener el formato: Latitud, Longitud (ej. -42.15, -73.5)",
+        "status_running": "🛰️ Procesando {ha:.1f} hectáreas ({lado:.0f}m × {lado:.0f}m) en Google Earth Engine...",
+        "step1": "1. Autenticando con Google Earth Engine...",
+        "step2": "2. Consultando catálogo Sentinel-2 y calculando índices...",
+        "step3": "3. Ponderando {n} escenas satelitales en memoria...",
+        "status_done": "✅ Análisis completado ({n} imágenes procesadas)",
+        "status_err": "❌ Error en el procesamiento",
+        "err_process": "Ocurrió un error al procesar los datos: {e}",
+        "err_no_imgs": "No se encontraron imágenes Sentinel-2 disponibles (con <60% de nubes) para esa ubicación y rango de fechas. Intenta ampliar las fechas.",
+        "warn_all_clouds": "Todos los píxeles de la parcela estaban cubiertos por nubes en las fechas seleccionadas. Prueba ampliar el rango de fechas.",
+        "diag_title": "### 📊 Diagnóstico de Parcela · {ha:.1f} ha ({lado:.0f}m × {lado:.0f}m)",
+        "m1_label": "🌱 Fiabilidad Global",
+        "m1_delta": "Índice compuesto",
+        "m2_label": "✅ Superficie Óptima",
+        "m2_delta": "Score > 70%",
+        "m3_label": "⚠️ Superficie Crítica",
+        "m3_delta": "Score < 40%",
+        "m4_label": "🛰️ Escenas Analizadas",
+        "m4_val": "{n} img",
+        "m4_delta": "{ha:.1f} ha ({lado:.0f}m lado)",
+        "alert_opt": "🌿 Estado Óptimo: El terreno presenta condiciones favorables y equilibradas en los 4 indicadores multiespectrales.",
+        "alert_mod": "🌾 Estado Moderado: Se detectan sectores con posible estrés hídrico o vigor medio que requieren monitoreo en terreno.",
+        "alert_crit": "🚨 Estado Crítico: Baja fiabilidad detectada. Se recomienda revisar humedad del suelo, niveles de nitrógeno o anegamiento.",
+        "layer_sat": "Google Satélite",
+        "layer_border": "Límite Parcela",
+        "layer_heat": "Fiabilidad de Terreno",
+        "legend_bottom": "🟢 **70% - 100%**: Fiabilidad Alta / Óptima  \n🟡 **45% - 69%**: Fiabilidad Media / Aceptable  \n🔴 **0% - 44%**: Zona Crítica / Revisar Terreno",
+        "guide_title": "### 🧭 Guía de Lectura",
+        "guide_body": "🟢 **70% - 100% (Óptimo)**  \nTerreno altamente fiable, vigoroso y con buen balance hídrico.\n\n🟡 **45% - 69% (Moderado)**  \nRendimiento aceptable; conviene vigilar su evolución en los próximos días.\n\n🔴 **0% - 44% (Crítico)**  \nZona problema: posible suelo desnudo, sequía, falta de nitrógeno o exceso de agua.",
+        "tech_title": "### 📋 Ficha Técnica",
+        "tech_body": "Dimensiones reales:\n- Ancho: {lado:.0f} m\n- Alto: {lado:.0f} m\n- Superficie: {ha:.2f} ha\n- Escenas Sentinel-2: {n}\n\nPesos aplicados:\n- 🌿 Vigor: {w1:.0f}%\n- 💧 Humedad: {w2:.0f}%\n- 🍃 Clorofila: {w3:.0f}%\n- ☀️ Drenaje: {w4:.0f}%",
+        "btn_download": "📥 Descargar Mapa (PNG)",
+        "file_prefix": "virtual_harvest_parcela",
+        "empty_title": "🛰️ Listo para analizar tu predio",
+        "empty_body": "Configura las coordenadas, el tamaño y los pesos en el panel izquierdo, luego presiona <b>\"Calcular Fiabilidad del Terreno\"</b>.",
+    },
+    "en": {
+        "badge": "🛰️ Sentinel-2 Remote Sensing · Google Earth Engine",
+        "title": "🌾 Virtual Harvest · Satellite Reliability Monitor",
+        "subtitle": "Assess field suitability and crop health by combining <b>4 multispectral indicators</b> at high resolution over real satellite imagery.",
+        "sidebar_title": "## ⚙️ Analysis Settings",
+        "sec1_header": "📍 1. Location from Google Maps",
+        "sec1_caption": "Right-click on Google Maps, copy the coordinates, and paste them here:",
+        "coord_label": "Coordinates (Latitude, Longitude)",
+        "sec2_header": "📐 2. Area Size to Analyze",
+        "unit_label": "Unit of measurement",
+        "units": [
+            "Hectares (total surface)",
+            "Meters (square side)",
+            "Kilometers (square side)",
+        ],
+        "qty_label": "Amount",
+        "sec3_header": "📅 3. Date Range",
+        "date_from": "From",
+        "date_to": "To",
+        "sec4_header": "🎨 4. Map Visualization",
+        "opacity_label": "Color layer opacity",
+        "sec5_header": "⚖️ 5. Indicator Weights (%)",
+        "w_vigor": "🌿 Plant Vigor (NDVI)",
+        "w_moisture": "💧 Crop Moisture (NDMI)",
+        "w_chloro": "🍃 Chlorophyll / Nitrogen (NDRE)",
+        "w_dry": "☀️ Water/Cloud-Free Ground (NDWI)",
+        "preview_title": "📐 **Field preview:**",
+        "preview_sq": "• Square of **{lado:.0f} m × {lado:.0f} m**",
+        "preview_ha": "• Total area: **{ha:.2f} ha**",
+        "coord_err_short": "Invalid format. Example: -42.15, -73.50",
+        "weight_exact": "✅ Exact weighting: **100%**",
+        "weight_norm": "ℹ️ Current sum: **{suma}%** (will normalize to 100%)",
+        "btn_run": "🚀 Calculate Field Reliability",
+        "err_zero_weights": "You must assign at least one percentage greater than 0 to the criteria.",
+        "err_dates": "The 'From' date cannot be later than the 'To' date.",
+        "err_coords": "Please check the coordinates. Format must be: Latitude, Longitude (e.g. -42.15, -73.5)",
+        "status_running": "🛰️ Processing {ha:.1f} hectares ({lado:.0f}m × {lado:.0f}m) in Google Earth Engine...",
+        "step1": "1. Authenticating with Google Earth Engine...",
+        "step2": "2. Querying Sentinel-2 catalog and computing indices...",
+        "step3": "3. Weighting {n} satellite scenes in memory...",
+        "status_done": "✅ Satellite analysis completed ({n} images processed)",
+        "status_err": "❌ Processing error",
+        "err_process": "An error occurred while processing the data: {e}",
+        "err_no_imgs": "No Sentinel-2 images available (<60% cloud cover) were found for this location and date range. Try expanding the dates.",
+        "warn_all_clouds": "All pixels in the field were covered by clouds during the selected dates. Try expanding the date range.",
+        "diag_title": "### 📊 Field Diagnostics · {ha:.1f} ha ({lado:.0f}m × {lado:.0f}m)",
+        "m1_label": "🌱 Global Reliability",
+        "m1_delta": "Composite index",
+        "m2_label": "✅ Optimal Area",
+        "m2_delta": "Score > 70%",
+        "m3_label": "⚠️ Critical Area",
+        "m3_delta": "Score < 40%",
+        "m4_label": "🛰️ Analyzed Scenes",
+        "m4_val": "{n} img",
+        "m4_delta": "{ha:.1f} ha ({lado:.0f}m side)",
+        "alert_opt": "🌿 Optimal Status: The field shows favorable and balanced conditions across all 4 multispectral indicators.",
+        "alert_mod": "🌾 Moderate Status: Sectors with potential water stress or medium vigor detected; field monitoring recommended.",
+        "alert_crit": "🚨 Critical Status: Low reliability detected. Check soil moisture, nitrogen levels, or waterlogging.",
+        "layer_sat": "Google Satellite",
+        "layer_border": "Field Boundary",
+        "layer_heat": "Field Reliability",
+        "legend_bottom": "🟢 **70% - 100%**: High / Optimal Reliability  \n🟡 **45% - 69%**: Medium / Acceptable Reliability  \n🔴 **0% - 44%**: Critical Zone / Inspect Field",
+        "guide_title": "### 🧭 Reading Guide",
+        "guide_body": "🟢 **70% - 100% (Optimal)**  \nHighly reliable, vigorous terrain with good water balance.\n\n🟡 **45% - 69% (Moderate)**  \nAcceptable performance; monitor its evolution over the coming days.\n\n🔴 **0% - 44% (Critical)**  \nProblem zone: possible bare soil, drought, nitrogen deficiency, or excess water.",
+        "tech_title": "### 📋 Technical Sheet",
+        "tech_body": "Actual dimensions:\n- Width: {lado:.0f} m\n- Height: {lado:.0f} m\n- Area: {ha:.2f} ha\n- Sentinel-2 scenes: {n}\n\nApplied weights:\n- 🌿 Vigor: {w1:.0f}%\n- 💧 Moisture: {w2:.0f}%\n- 🍃 Chlorophyll: {w3:.0f}%\n- ☀️ Drainage: {w4:.0f}%",
+        "btn_download": "📥 Download Map (PNG)",
+        "file_prefix": "virtual_harvest_field",
+        "empty_title": "🛰️ Ready to analyze your field",
+        "empty_body": "Set the coordinates, area size, and weights in the left panel, then click <b>\"Calculate Field Reliability\"</b>.",
+    },
+}
 
 # --- ESTILOS VISUALES ---
 st.markdown(
@@ -135,63 +281,64 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# --- SELECTOR DE IDIOMA EN PANEL LATERAL ---
+idioma_sel = st.sidebar.radio(
+    "🌐 Idioma / Language",
+    ["Español", "English"],
+    horizontal=True,
+)
+lang = "es" if idioma_sel == "Español" else "en"
+t = TEXTOS[lang]
+
 # --- ENCABEZADO ---
 st.markdown(
-    """
+    f"""
 <div class="header-agro">
-    <div class="header-badge">🛰️ Teledetección Sentinel-2 · Google Earth Engine</div>
-    <h1>🌱 TerraAgro · Monitor de Fiabilidad Satelital</h1>
-    <p>Evalúa la aptitud y salud de tus potreros combinando <b>4 indicadores multiespectrales</b> de alta resolución sobre imagen aérea real.</p>
+    <div class="header-badge">{t["badge"]}</div>
+    <h1>{t["title"]}</h1>
+    <p>{t["subtitle"]}</p>
 </div>
 """,
     unsafe_allow_html=True,
 )
 
 # --- PANEL LATERAL ---
-st.sidebar.markdown("## ⚙️ Configuración de Análisis")
+st.sidebar.markdown(t["sidebar_title"])
 st.sidebar.divider()
 
-st.sidebar.header("📍 1. Ubicación desde Google Maps")
-st.sidebar.caption(
-    "Haz clic derecho en Google Maps, copia las coordenadas y pégalas aquí:"
-)
-coord_texto = st.sidebar.text_input(
-    "Coordenadas (Latitud, Longitud)", value="-42.1500, -73.5000"
-)
+st.sidebar.header(t["sec1_header"])
+st.sidebar.caption(t["sec1_caption"])
+coord_texto = st.sidebar.text_input(t["coord_label"], value="-42.1500, -73.5000")
 
-st.sidebar.header("📐 2. Tamaño del Área a Analizar")
-unidad = st.sidebar.selectbox(
-    "Unidad de medida",
-    [
-        "Hectáreas (superficie total)",
-        "Metros (lado del cuadrado)",
-        "Kilómetros (lado del cuadrado)",
-    ],
+st.sidebar.header(t["sec2_header"])
+unidad_idx = st.sidebar.selectbox(
+    t["unit_label"],
+    range(len(t["units"])),
+    format_func=lambda i: t["units"][i],
 )
+unidad_nombre_corto = t["units"][unidad_idx].split()[0]
 valor_tamano = st.sidebar.number_input(
-    f"Cantidad ({unidad.split()[0]})",
+    f"{t['qty_label']} ({unidad_nombre_corto})",
     min_value=0.1,
     value=25.0,
     step=1.0,
 )
 
-st.sidebar.header("📅 3. Rango de Fechas")
+st.sidebar.header(t["sec3_header"])
 col_f1, col_f2 = st.sidebar.columns(2)
 with col_f1:
-    fecha_inicio = st.date_input("Desde", value=datetime.date(2026, 10, 15))
+    fecha_inicio = st.date_input(t["date_from"], value=datetime.date(2026, 10, 15))
 with col_f2:
-    fecha_fin = st.date_input("Hasta", value=datetime.date(2026, 11, 12))
+    fecha_fin = st.date_input(t["date_to"], value=datetime.date(2026, 11, 12))
 
-st.sidebar.header("🎨 4. Visualización en Mapa")
-transparencia = st.sidebar.slider(
-    "Opacidad de capa de colores", 0.0, 1.0, 0.65, step=0.05
-)
+st.sidebar.header(t["sec4_header"])
+transparencia = st.sidebar.slider(t["opacity_label"], 0.0, 1.0, 0.65, step=0.05)
 
-st.sidebar.header("⚖️ 5. Importancia de cada dato (%)")
-p_vigor = st.sidebar.slider("🌿 Vigor Vegetal (NDVI)", 0, 100, 35)
-p_humedad = st.sidebar.slider("💧 Humedad en Cultivo (NDMI)", 0, 100, 30)
-p_clorofila = st.sidebar.slider("🍃 Clorofila / Nitrógeno (NDRE)", 0, 100, 20)
-p_calidad = st.sidebar.slider("☀️ Terreno Libre Agua/Nubes (NDWI)", 0, 100, 15)
+st.sidebar.header(t["sec5_header"])
+p_vigor = st.sidebar.slider(t["w_vigor"], 0, 100, 35)
+p_humedad = st.sidebar.slider(t["w_moisture"], 0, 100, 30)
+p_clorofila = st.sidebar.slider(t["w_chloro"], 0, 100, 20)
+p_calidad = st.sidebar.slider(t["w_dry"], 0, 100, 15)
 
 
 # --- CONEXIÓN Y DESCARGA CON GOOGLE EARTH ENGINE ---
@@ -200,34 +347,33 @@ def inicializar_gee():
     """
     Inicializa Google Earth Engine de forma silenciosa usando:
     1. Streamlit Secrets (cuando está desplegado en la web).
-    2. Archivo local 'credenciales-gee.json' (cuando corre en tu PC).
+    2. Archivo local 'credenciales-gee.json' (cuando corre en PC).
     """
+    info_cuenta = None
+
     try:
         if "gee_credentials" in st.secrets:
             info_cuenta = dict(st.secrets["gee_credentials"])
-            credenciales = ee.ServiceAccountCredentials(
-                info_cuenta["client_email"], key_data=json.dumps(info_cuenta)
-            )
-            ee.Initialize(credenciales)
-            return True
     except Exception:
         pass
 
-    if os.path.exists("credenciales-gee.json"):
+    if info_cuenta is None:
+        if not os.path.exists("credenciales-gee.json"):
+            st.error(
+                "No se encontró 'credenciales-gee.json' ni '[gee_credentials]' en Streamlit Secrets."
+            )
+            st.stop()
         with open("credenciales-gee.json", encoding="utf-8") as f:
             info_cuenta = json.load(f)
-        credenciales = ee.ServiceAccountCredentials(
-            info_cuenta["client_email"], "credenciales-gee.json"
-        )
-        ee.Initialize(credenciales)
-        return True
 
-    st.error(
-        "No se encontraron credenciales de Google Earth Engine. "
-        "Agrega 'credenciales-gee.json' en la carpeta local o configura "
-        "'[gee_credentials]' en Streamlit Secrets."
+    credenciales = ee.ServiceAccountCredentials(
+        info_cuenta["client_email"], key_data=json.dumps(info_cuenta)
     )
-    st.stop()
+    ee.Initialize(
+        credentials=credenciales,
+        project=info_cuenta["project_id"],
+    )
+    return True
 
 
 def enmascarar_nubes_s2(imagen):
@@ -240,17 +386,14 @@ def enmascarar_nubes_s2(imagen):
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def obtener_indices_gee(west, east, south, north, f_inicio_str, f_fin_str):
+def obtener_indices_gee(west, east, south, north, f_inicio_str, f_fin_str, msg_no_imgs):
     """
     Calcula los 4 índices escalados (0-100) en Google Earth Engine y descarga
-    un único arreglo NumPy en memoria (.npy) en ~2-4 segundos.
-    Cacheado por 1 hora: cambiar los pesos o la opacidad es instantáneo (0s).
+    un único arreglo NumPy en memoria (.npy).
     """
     inicializar_gee()
 
     region = ee.Geometry.Rectangle([west, south, east, north])
-
-    # Google Earth Engine requiere fecha final exclusiva; sumamos 1 día
     f_fin_dt = datetime.date.fromisoformat(f_fin_str) + datetime.timedelta(days=1)
 
     coleccion = (
@@ -262,10 +405,7 @@ def obtener_indices_gee(west, east, south, north, f_inicio_str, f_fin_str):
 
     cantidad_imagenes = coleccion.size().getInfo()
     if cantidad_imagenes == 0:
-        raise ValueError(
-            "No se encontraron imágenes Sentinel-2 disponibles (con <60% de nubes) "
-            "para esa ubicación y rango de fechas. Intenta ampliar las fechas."
-        )
+        raise ValueError(msg_no_imgs)
 
     imagen_compuesta = coleccion.map(enmascarar_nubes_s2).mean().clip(region)
 
@@ -283,7 +423,6 @@ def obtener_indices_gee(west, east, south, north, f_inicio_str, f_fin_str):
 
     imagen_4_bandas = ee.Image.cat([s_vigor, s_humedad, s_clorofila, s_terreno_seco])
 
-    # Descarga directa en formato NPY (sin archivos temporales ni GeoTIFF)
     url_npy = imagen_4_bandas.getDownloadURL(
         {
             "region": region,
@@ -309,18 +448,18 @@ def obtener_indices_gee(west, east, south, north, f_inicio_str, f_fin_str):
 
 
 # --- FUNCIONES AUXILIARES ---
-def calcular_bounding_box(coord_str, unidad_sel, cantidad):
+def calcular_bounding_box(coord_str, idx_unidad, cantidad):
     partes = coord_str.replace("(", "").replace(")", "").split(",")
     lat_centro = float(partes[0].strip())
     lon_centro = float(partes[1].strip())
 
-    if "Hectáreas" in unidad_sel:
+    if idx_unidad == 0:  # Hectáreas
         area_m2 = cantidad * 10000.0
         lado_metros = math.sqrt(area_m2)
-    elif "Kilómetros" in unidad_sel:
+    elif idx_unidad == 2:  # Kilómetros
         lado_metros = cantidad * 1000.0
         area_m2 = lado_metros**2
-    else:  # Metros
+    else:  # Metros (idx_unidad == 1)
         lado_metros = cantidad
         area_m2 = lado_metros**2
 
@@ -339,7 +478,6 @@ def calcular_bounding_box(coord_str, unidad_sel, cantidad):
 
 
 def matriz_a_imagen_png_url(matriz):
-    """Genera una imagen PNG transparente en memoria codificada en Base64 para Folium."""
     norm = Normalize(vmin=0, vmax=100)
     cmap = matplotlib.colormaps["RdYlGn"]
     rgba = cmap(norm(matriz))
@@ -356,7 +494,6 @@ def matriz_a_imagen_png_url(matriz):
 
 
 def matriz_a_bytes_png(matriz):
-    """Genera los bytes de un archivo PNG descargable."""
     norm = Normalize(vmin=0, vmax=100)
     cmap = matplotlib.colormaps["RdYlGn"]
     rgba = cmap(norm(matriz))
@@ -375,44 +512,39 @@ def matriz_a_bytes_png(matriz):
 st.sidebar.divider()
 try:
     _, _, lado_m_prev, ha_tot_prev = calcular_bounding_box(
-        coord_texto, unidad, valor_tamano
+        coord_texto, unidad_idx, valor_tamano
     )
     st.sidebar.success(
-        f"📐 **Vista previa de parcela:**"
-
-        f"• Cuadrado de **{lado_m_prev:.0f} m × {lado_m_prev:.0f} m**"
-
-        f"• Superficie total: **{ha_tot_prev:.2f} ha**"
+        f"{t['preview_title']}\n\n"
+        f"{t['preview_sq'].format(lado=lado_m_prev)}\n\n"
+        f"{t['preview_ha'].format(ha=ha_tot_prev)}"
     )
 except Exception:
-    st.sidebar.error("Formato inválido. Usa ejemplo: -42.15, -73.50")
+    st.sidebar.error(t["coord_err_short"])
 
 suma_pesos = p_vigor + p_humedad + p_clorofila + p_calidad
 if suma_pesos == 100:
-    st.sidebar.caption("✅ Ponderación exacta: **100%**")
+    st.sidebar.caption(t["weight_exact"])
 else:
-    st.sidebar.caption(f"ℹ️ Suma actual: **{suma_pesos}%** (se normalizará a 100%)")
+    st.sidebar.caption(t["weight_norm"].format(suma=suma_pesos))
 
 # --- BOTÓN PRINCIPAL ---
 col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
 with col_btn2:
-    ejecutar = st.button("🚀 Calcular Fiabilidad del Terreno", type="primary")
+    ejecutar = st.button(t["btn_run"], type="primary")
 
 if ejecutar:
     if suma_pesos == 0:
-        st.error("Debes asignar al menos un porcentaje mayor a 0 en los criterios.")
+        st.error(t["err_zero_weights"])
     elif fecha_inicio > fecha_fin:
-        st.error("La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.")
+        st.error(t["err_dates"])
     else:
         try:
             bbox, centro, lado_m, ha_tot = calcular_bounding_box(
-                coord_texto, unidad, valor_tamano
+                coord_texto, unidad_idx, valor_tamano
             )
         except Exception:
-            st.error(
-                "Por favor revisa las coordenadas. Deben tener el formato: "
-                "Latitud, Longitud (ej. -42.15, -73.5)"
-            )
+            st.error(t["err_coords"])
             st.stop()
 
         w1 = p_vigor / suma_pesos
@@ -421,14 +553,14 @@ if ejecutar:
         w4 = p_calidad / suma_pesos
 
         with st.status(
-            f"🛰️ Procesando {ha_tot:.1f} hectáreas ({lado_m:.0f}m × {lado_m:.0f}m) en Google Earth Engine...",
+            t["status_running"].format(ha=ha_tot, lado=lado_m),
             expanded=True,
         ) as status:
             try:
-                st.write("1. Autenticando con Google Earth Engine...")
+                st.write(t["step1"])
                 inicializar_gee()
 
-                st.write("2. Consultando catálogo Sentinel-2 y calculando índices...")
+                st.write(t["step2"])
                 datos_bandas, n_imgs = obtener_indices_gee(
                     round(bbox["west"], 6),
                     round(bbox["east"], 6),
@@ -436,9 +568,10 @@ if ejecutar:
                     round(bbox["north"], 6),
                     str(fecha_inicio),
                     str(fecha_fin),
+                    t["err_no_imgs"],
                 )
 
-                st.write(f"3. Ponderando {n_imgs} escenas satelitales en memoria...")
+                st.write(t["step3"].format(n=n_imgs))
                 fiabilidad = (
                     (datos_bandas[0] * w1)
                     + (datos_bandas[1] * w2)
@@ -457,14 +590,14 @@ if ejecutar:
                     "n_imgs": n_imgs,
                 }
                 status.update(
-                    label=f"✅ Análisis completado ({n_imgs} imágenes procesadas)",
+                    label=t["status_done"].format(n=n_imgs),
                     state="complete",
                     expanded=False,
                 )
 
             except Exception as e:
-                status.update(label="❌ Error en el procesamiento", state="error")
-                st.error(f"Ocurrió un error al procesar los datos: {e}")
+                status.update(label=t["status_err"], state="error")
+                st.error(t["err_process"].format(e=e))
 
 # --- MOSTRAR RESULTADOS ---
 if "resultado_agro" in st.session_state:
@@ -478,10 +611,7 @@ if "resultado_agro" in st.session_state:
     n_imgs = res.get("n_imgs", 0)
 
     if np.all(np.isnan(matriz)):
-        st.warning(
-            "Todos los píxeles de la parcela estaban cubiertos por nubes en las "
-            "fechas seleccionadas. Prueba ampliar el rango de fechas."
-        )
+        st.warning(t["warn_all_clouds"])
         st.stop()
 
     promedio = float(np.nanmean(matriz))
@@ -489,41 +619,29 @@ if "resultado_agro" in st.session_state:
     zona_critica = float(np.nanmean(matriz < 40) * 100)
 
     st.divider()
-    st.markdown(
-        f"### 📊 Diagnóstico de Parcela · {ha_tot:.1f} ha "
-        f"({lado_m:.0f}m × {lado_m:.0f}m)"
-    )
+    st.markdown(t["diag_title"].format(ha=ha_tot, lado=lado_m))
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("🌱 Fiabilidad Global", f"{promedio:.1f}%", delta="Índice compuesto")
-    m2.metric("✅ Superficie Óptima", f"{zona_optima:.1f}%", delta="Score > 70%")
+    m1.metric(t["m1_label"], f"{promedio:.1f}%", delta=t["m1_delta"])
+    m2.metric(t["m2_label"], f"{zona_optima:.1f}%", delta=t["m2_delta"])
     m3.metric(
-        "⚠️ Superficie Crítica",
+        t["m3_label"],
         f"{zona_critica:.1f}%",
-        delta="Score < 40%",
+        delta=t["m3_delta"],
         delta_color="inverse",
     )
     m4.metric(
-        "🛰️ Escenas Analizadas",
-        f"{n_imgs} img",
-        delta=f"{ha_tot:.1f} ha ({lado_m:.0f}m lado)",
+        t["m4_label"],
+        t["m4_val"].format(n=n_imgs),
+        delta=t["m4_delta"].format(ha=ha_tot, lado=lado_m),
     )
     st.write("")
 
     if promedio >= 75:
-        st.success(
-            "🌿 Estado Óptimo: El terreno presenta condiciones favorables "
-            "y equilibradas en los 4 indicadores multiespectrales."
-        )
+        st.success(t["alert_opt"])
     elif promedio >= 50:
-        st.warning(
-            "🌾 Estado Moderado: Se detectan sectores con posible estrés hídrico "
-            "o vigor medio que requieren monitoreo en terreno."
-        )
+        st.warning(t["alert_mod"])
     else:
-        st.error(
-            "🚨 Estado Crítico: Baja fiabilidad detectada. Se recomienda revisar "
-            "humedad del suelo, niveles de nitrógeno o anegamiento."
-        )
+        st.error(t["alert_crit"])
 
     col_mapa, col_leyenda = st.columns([3.2, 1.2], gap="large")
 
@@ -532,7 +650,7 @@ if "resultado_agro" in st.session_state:
         folium.TileLayer(
             tiles="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
             attr="Google",
-            name="Google Satélite",
+            name=t["layer_sat"],
         ).add_to(mapa)
 
         folium.Rectangle(
@@ -544,7 +662,7 @@ if "resultado_agro" in st.session_state:
             weight=2.5,
             dash_array="5, 5",
             fill=False,
-            name="Límite Parcela",
+            name=t["layer_border"],
         ).add_to(mapa)
 
         img_url = matriz_a_imagen_png_url(matriz)
@@ -555,71 +673,44 @@ if "resultado_agro" in st.session_state:
                 [bbox["north"], bbox["east"]],
             ],
             opacity=transparencia,
-            name="Fiabilidad de Terreno",
+            name=t["layer_heat"],
         ).add_to(mapa)
 
         folium.LayerControl().add_to(mapa)
         st_folium(mapa, use_container_width=True, height=530, returned_objects=[])
 
-        st.markdown(
-            """
-🟢 **70% - 100%**: Fiabilidad Alta / Óptima  
-🟡 **45% - 69%**: Fiabilidad Media / Aceptable  
-🔴 **0% - 44%**: Zona Crítica / Revisar Terreno
-"""
-        )
+        st.markdown(t["legend_bottom"])
 
     with col_leyenda:
-        st.markdown("### 🧭 Guía de Lectura")
-        st.markdown(
-            """
-🟢 **70% - 100% (Óptimo)**  
-Terreno altamente fiable, vigoroso y con buen balance hídrico.
-
-🟡 **45% - 69% (Moderado)**  
-Rendimiento aceptable; conviene vigilar su evolución en los próximos días.
-
-🔴 **0% - 44% (Crítico)**  
-Zona problema: posible suelo desnudo, sequía, falta de nitrógeno o exceso de agua.
-"""
-        )
-        st.markdown("### 📋 Ficha Técnica")
+        st.markdown(t["guide_title"])
+        st.markdown(t["guide_body"])
+        st.markdown(t["tech_title"])
         st.info(
-            f"Dimensiones reales:"
-
-            f"- Ancho: {lado_m:.0f} m"
-
-            f"- Alto: {lado_m:.0f} m"
-            
-            f"- Superficie: {ha_tot:.2f} ha"
-
-            f"- Escenas Sentinel-2: {n_imgs}"
-
-            f"Pesos aplicados:"
-
-            f"- 🌿 Vigor: {w1*100:.0f}%"
-
-            f"- 💧 Humedad: {w2*100:.0f}%"
-
-            f"- 🍃 Clorofila: {w3*100:.0f}%"
-            
-            f"- ☀️ Drenaje: {w4*100:.0f}%"
+            t["tech_body"].format(
+                lado=lado_m,
+                ha=ha_tot,
+                n=n_imgs,
+                w1=w1 * 100,
+                w2=w2 * 100,
+                w3=w3 * 100,
+                w4=w4 * 100,
+            )
         )
 
         png_bytes = matriz_a_bytes_png(matriz)
         st.download_button(
-            label="📥 Descargar Mapa (PNG)",
+            label=t["btn_download"],
             data=png_bytes,
-            file_name=f"fiabilidad_parcela_{ha_tot:.0f}ha.png",
+            file_name=f"{t['file_prefix']}_{ha_tot:.0f}ha.png",
             mime="image/png",
             use_container_width=True,
         )
 else:
     st.markdown(
-        """
+        f"""
 <div class="empty-state">
-    <h3>🛰️ Listo para analizar tu predio</h3>
-    <p>Configura las coordenadas, el tamaño y los pesos en el panel izquierdo, luego presiona <b>"Calcular Fiabilidad del Terreno"</b>.</p>
+    <h3>{t["empty_title"]}</h3>
+    <p>{t["empty_body"]}</p>
 </div>
 """,
         unsafe_allow_html=True,
