@@ -1,8 +1,9 @@
-import base64
+code_content = '''import base64
 import datetime
 import json
 import math
 import os
+import time
 from io import BytesIO
 
 import ee
@@ -60,12 +61,13 @@ TEXTOS = {
         "err_zero_weights": "Debes asignar al menos un porcentaje mayor a 0 en los criterios.",
         "err_dates": "La fecha 'Desde' no puede ser posterior a la fecha 'Hasta'.",
         "err_coords": "Por favor revisa las coordenadas. Deben tener el formato: Latitud, Longitud (ej. -42.15, -73.5)",
-        "status_running": "🛰️ Procesando {ha:.1f} hectáreas ({lado:.0f}m × {lado:.0f}m) en Google Earth Engine...",
-        "step1": "1. Autenticando con Google Earth Engine...",
-        "step2": "2. Consultando catálogo Sentinel-2 y calculando índices...",
-        "step3": "3. Ponderando {n} escenas satelitales en memoria...",
-        "status_done": "✅ Análisis completado ({n} imágenes procesadas)",
-        "status_err": "❌ Error en el procesamiento",
+        "loader_title": "🛰️ Escaneo Orbital Sentinel-2 en Curso",
+        "loader_sub": "Analizando {ha:.1f} ha ({lado:.0f}m × {lado:.0f}m) · Resolución espacial 10m/px",
+        "step1": "🔐 Estableciendo enlace satelital seguro con Google Earth Engine...",
+        "step2": "📡 Filtrando pasadas orbitales Sentinel-2 y limpiando nubosidad...",
+        "step3": "🧬 Procesando bandas espectrales (NDVI · NDMI · NDRE · NDWI)...",
+        "step4": "⚖️ Ponderando {n} escenas satelitales y renderizando mapa...",
+        "step_done": "✨ ¡Escaneo orbital completado! ({n} escenas procesadas)",
         "err_process": "Ocurrió un error al procesar los datos: {e}",
         "err_no_imgs": "No se encontraron imágenes Sentinel-2 disponibles (con <60% de nubes) para esa ubicación y rango de fechas. Intenta ampliar las fechas.",
         "warn_all_clouds": "Todos los píxeles de la parcela estaban cubiertos por nubes en las fechas seleccionadas. Prueba ampliar el rango de fechas.",
@@ -131,12 +133,13 @@ TEXTOS = {
         "err_zero_weights": "You must assign at least one percentage greater than 0 to the criteria.",
         "err_dates": "The 'From' date cannot be later than the 'To' date.",
         "err_coords": "Please check the coordinates. Format must be: Latitude, Longitude (e.g. -42.15, -73.5)",
-        "status_running": "🛰️ Processing {ha:.1f} hectares ({lado:.0f}m × {lado:.0f}m) in Google Earth Engine...",
-        "step1": "1. Authenticating with Google Earth Engine...",
-        "step2": "2. Querying Sentinel-2 catalog and computing indices...",
-        "step3": "3. Weighting {n} satellite scenes in memory...",
-        "status_done": "✅ Satellite analysis completed ({n} images processed)",
-        "status_err": "❌ Processing error",
+        "loader_title": "🛰️ Sentinel-2 Orbital Scan in Progress",
+        "loader_sub": "Scanning {ha:.1f} ha ({lado:.0f}m × {lado:.0f}m) · 10m/px spatial resolution",
+        "step1": "🔐 Establishing secure satellite link with Google Earth Engine...",
+        "step2": "📡 Filtering Sentinel-2 orbital passes & masking cloud cover...",
+        "step3": "🧬 Computing spectral bands (NDVI · NDMI · NDRE · NDWI)...",
+        "step4": "⚖️ Weighting {n} satellite scenes and rendering heatmap...",
+        "step_done": "✨ Orbital scan complete! ({n} scenes processed)",
         "err_process": "An error occurred while processing the data: {e}",
         "err_no_imgs": "No Sentinel-2 images available (<60% cloud cover) were found for this location and date range. Try expanding the dates.",
         "warn_all_clouds": "All pixels in the field were covered by clouds during the selected dates. Try expanding the date range.",
@@ -276,10 +279,146 @@ st.markdown(
         color: #2d6a4f;
         margin-top: 1.5rem;
     }
+
+    /* --- BARRA DE CARGA ÉPICA ORBITAL --- */
+    @keyframes pulseRadar {
+        0% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(82, 183, 136, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 14px rgba(82, 183, 136, 0); }
+        100% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(82, 183, 136, 0); }
+    }
+    @keyframes shimmerBeam {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+    @keyframes floatSat {
+        0%, 100% { transform: translateY(0px) rotate(0deg); }
+        50% { transform: translateY(-4px) rotate(6deg); }
+    }
+    .epic-loader-card {
+        background: linear-gradient(135deg, #071912 0%, #133124 55%, #1d4d38 100%);
+        border: 1px solid rgba(116, 198, 157, 0.35);
+        border-radius: 18px;
+        padding: 1.6rem 2rem;
+        margin: 1.4rem 0;
+        box-shadow: 0 16px 36px rgba(8, 28, 21, 0.26);
+        color: #ffffff;
+        position: relative;
+        overflow: hidden;
+    }
+    .epic-loader-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .epic-loader-left {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+    .radar-orb {
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 30% 30%, #74c69d, #2d6a4f);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.35rem;
+        animation: pulseRadar 1.8s infinite;
+        flex-shrink: 0;
+    }
+    .sat-icon {
+        display: inline-block;
+        animation: floatSat 2.2s ease-in-out infinite;
+    }
+    .epic-loader-title {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #ffffff;
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+    .epic-loader-sub {
+        font-size: 0.85rem;
+        color: #b7e4c7;
+        margin: 2px 0 0 0;
+    }
+    .epic-pct-badge {
+        background: rgba(116, 198, 157, 0.16);
+        border: 1px solid rgba(116, 198, 157, 0.45);
+        color: #95d5b2;
+        font-weight: 800;
+        font-size: 1.2rem;
+        padding: 6px 14px;
+        border-radius: 12px;
+        font-variant-numeric: tabular-nums;
+    }
+    .epic-track {
+        width: 100%;
+        height: 14px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 999px;
+        overflow: hidden;
+        box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.4);
+        margin-bottom: 0.85rem;
+    }
+    .epic-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: linear-gradient(
+            90deg,
+            #40916c 0%,
+            #74c69d 30%,
+            #d8f3dc 50%,
+            #52b788 70%,
+            #40916c 100%
+        );
+        background-size: 200% 100%;
+        animation: shimmerBeam 1.6s linear infinite;
+        box-shadow: 0 0 14px rgba(116, 198, 157, 0.85);
+        transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .epic-step-text {
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: #d8f3dc;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+
+def renderizar_barra_epica(contenedor, pct, titulo, subtitulo, paso_actual):
+    """Dibuja o actualiza la tarjeta de carga orbital animada."""
+    contenedor.markdown(
+        f"""
+        <div class="epic-loader-card">
+            <div class="epic-loader-top">
+                <div class="epic-loader-left">
+                    <div class="radar-orb"><span class="sat-icon">🛰️</span></div>
+                    <div>
+                        <p class="epic-loader-title">{titulo}</p>
+                        <p class="epic-loader-sub">{subtitulo}</p>
+                    </div>
+                </div>
+                <div class="epic-pct-badge">{pct}%</div>
+            </div>
+            <div class="epic-track">
+                <div class="epic-fill" style="width: {pct}%;"></div>
+            </div>
+            <p class="epic-step-text">{paso_actual}</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 # --- SELECTOR DE IDIOMA EN PANEL LATERAL ---
 idioma_sel = st.sidebar.radio(
@@ -533,6 +672,9 @@ col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
 with col_btn2:
     ejecutar = st.button(t["btn_run"], type="primary")
 
+# Contenedor dedicado para la barra de carga épica
+loader_slot = st.empty()
+
 if ejecutar:
     if suma_pesos == 0:
         st.error(t["err_zero_weights"])
@@ -552,52 +694,76 @@ if ejecutar:
         w3 = p_clorofila / suma_pesos
         w4 = p_calidad / suma_pesos
 
-        with st.status(
-            t["status_running"].format(ha=ha_tot, lado=lado_m),
-            expanded=True,
-        ) as status:
-            try:
-                st.write(t["step1"])
-                inicializar_gee()
+        subtitulo_loader = t["loader_sub"].format(ha=ha_tot, lado=lado_m)
 
-                st.write(t["step2"])
-                datos_bandas, n_imgs = obtener_indices_gee(
-                    round(bbox["west"], 6),
-                    round(bbox["east"], 6),
-                    round(bbox["south"], 6),
-                    round(bbox["north"], 6),
-                    str(fecha_inicio),
-                    str(fecha_fin),
-                    t["err_no_imgs"],
-                )
+        try:
+            # Fase 1: Conexión y enlace orbital
+            renderizar_barra_epica(
+                loader_slot, 20, t["loader_title"], subtitulo_loader, t["step1"]
+            )
+            inicializar_gee()
+            time.sleep(0.25)
 
-                st.write(t["step3"].format(n=n_imgs))
-                fiabilidad = (
-                    (datos_bandas[0] * w1)
-                    + (datos_bandas[1] * w2)
-                    + (datos_bandas[2] * w3)
-                    + (datos_bandas[3] * w4)
-                )
-                matriz = np.clip(fiabilidad, 0, 100)
+            # Fase 2: Filtrado orbital y máscara de nubes
+            renderizar_barra_epica(
+                loader_slot, 50, t["loader_title"], subtitulo_loader, t["step2"]
+            )
+            time.sleep(0.2)
 
-                st.session_state["resultado_agro"] = {
-                    "matriz": matriz,
-                    "bbox": bbox,
-                    "centro": centro,
-                    "lado_m": lado_m,
-                    "ha_tot": ha_tot,
-                    "pesos": (w1, w2, w3, w4),
-                    "n_imgs": n_imgs,
-                }
-                status.update(
-                    label=t["status_done"].format(n=n_imgs),
-                    state="complete",
-                    expanded=False,
-                )
+            # Fase 3: Procesamiento de bandas espectrales en GEE
+            renderizar_barra_epica(
+                loader_slot, 78, t["loader_title"], subtitulo_loader, t["step3"]
+            )
+            datos_bandas, n_imgs = obtener_indices_gee(
+                round(bbox["west"], 6),
+                round(bbox["east"], 6),
+                round(bbox["south"], 6),
+                round(bbox["north"], 6),
+                str(fecha_inicio),
+                str(fecha_fin),
+                t["err_no_imgs"],
+            )
 
-            except Exception as e:
-                status.update(label=t["status_err"], state="error")
-                st.error(t["err_process"].format(e=e))
+            # Fase 4: Ponderación y síntesis final
+            renderizar_barra_epica(
+                loader_slot,
+                95,
+                t["loader_title"],
+                subtitulo_loader,
+                t["step4"].format(n=n_imgs),
+            )
+            fiabilidad = (
+                (datos_bandas[0] * w1)
+                + (datos_bandas[1] * w2)
+                + (datos_bandas[2] * w3)
+                + (datos_bandas[3] * w4)
+            )
+            matriz = np.clip(fiabilidad, 0, 100)
+
+            st.session_state["resultado_agro"] = {
+                "matriz": matriz,
+                "bbox": bbox,
+                "centro": centro,
+                "lado_m": lado_m,
+                "ha_tot": ha_tot,
+                "pesos": (w1, w2, w3, w4),
+                "n_imgs": n_imgs,
+            }
+
+            # Completado al 100% con pausa breve para apreciar el cierre
+            renderizar_barra_epica(
+                loader_slot,
+                100,
+                t["loader_title"],
+                subtitulo_loader,
+                t["step_done"].format(n=n_imgs),
+            )
+            time.sleep(0.75)
+            loader_slot.empty()
+
+        except Exception as e:
+            loader_slot.empty()
+            st.error(t["err_process"].format(e=e))
 
 # --- MOSTRAR RESULTADOS ---
 if "resultado_agro" in st.session_state:
@@ -715,3 +881,9 @@ else:
 """,
         unsafe_allow_html=True,
     )
+'''
+
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(code_content)
+
+print("app.py updated successfully")
