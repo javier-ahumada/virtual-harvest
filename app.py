@@ -1,4 +1,4 @@
-code_content = '''import base64
+import base64
 import datetime
 import json
 import math
@@ -881,9 +881,3 @@ else:
 """,
         unsafe_allow_html=True,
     )
-'''
-
-with open("app.py", "w", encoding="utf-8") as f:
-    f.write(code_content)
-
-print("app.py updated successfully")
